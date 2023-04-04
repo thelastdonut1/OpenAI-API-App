@@ -25,6 +25,7 @@ class User:
         self.username = username
         self.role = role
         self.balance: float = 0
+        self.conversations = []
         self.user_id = self.generate_user_id()
 
         if role == 'user':
@@ -117,7 +118,8 @@ class User:
             "username": self.username,
             "password": self.password,
             "role": self.role,
-            "balance": self.balance
+            "balance": self.balance,
+            "conversations": self.conversations
         }
 
     # Store the user data in the database. On user creation, the user is saved to the database.
@@ -185,6 +187,7 @@ class User:
                 )
                 user.user_id = user_data['user_id']
                 user.balance = float(user_data['balance'])
+                user.conversations = user_data['conversations']
                 return user
             else:
                 # Password does not match

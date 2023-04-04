@@ -2,6 +2,8 @@ import openai
 import json
 import getpass
 import uuid
+import json
+import os
 import time
 
 from datetime import datetime
@@ -350,97 +352,19 @@ def handle_admin(user: User):
 
 #     return response
 
-def handle_chat(user: User, conversation: list):
-    print("Beginning chat session....")
-    print("-" * 50)
-    print("Enter a prompt (use '\\n' for a newline): ")
-    prompt = input(f'{user.username} > ').replace('\\n', '\n')
-
-    message = {"role": "user", "content": prompt}
-    # messages = [{"role": "user", "content": prompt}]
-
-    # Redefining messages as conversation
-    # This is how you get continuous conversation. Conversation is a list of messages
-    #! Important: Stored as "conversation" locally, sent to API as "messages"
-    conversation.append(message)
-
-    # Settings + Prompt/Messages = Request
-    settings.update({'messages': conversation})
-    request = settings
-
-    #TODO: Add async functionality
-    # response = await call_openai_api(request)
-
-    # Send request to API
-    try:
-        response = openai.ChatCompletion.create(**request)
-    except Exception as e:
-        # Print the error
-        print(f'Error: Could not complete request. \n {e}')
-        # Ask the user if they would like to try again
-        while True:
-            try_again = input("Would you like to try again? (y/n): ")
-            if try_again == 'y':
-                handle_chat()
-            elif try_again == 'n':
-                # End the function
-                return
-            else:
-                print("Error: Invalid input. Please try again.")
-    
-    status = response['choices'][0]['finish_reason']
-
-    if status != 'stop':
-        # Print the error
-        print('Error: Could not complete request. Please try again.')
-        # Ask the user if they would like to try again
-        while True:
-            try_again = input("Would you like to try again? (y/n): ")
-            if try_again == 'y':
-                handle_chat()
-            elif try_again == 'n':
-                # End the function
-                return
-            else:
-                print("Error: Invalid input. Please try again.")
-
-    # Print the response
-    answer = response['choices'][0]['message']['content']
-    print(f"{settings['model']} > {answer}")
-    print('-' * 50)
-
-    # Add the response to the conversation
-    conversation.append({"role": "assistant", "content": answer})  
-
-    #! May need to return conversation as well
-    return response
  
-def analyze_response(response):
-    model = response['model']
-    response_type = response['object']
-    response_tokens = response['usage']['completion_tokens']
-    prompt_tokens = response['usage']['prompt_tokens']
-    total_tokens = response_tokens + prompt_tokens
-
-    cost = get_cost(response)
-
-    results = {}
-
-    results['model'] = model
-    results['response_type'] = response_type
-    results['response_tokens'] = response_tokens
-    results['prompt_tokens'] = prompt_tokens
-    results['total_tokens'] = total_tokens
-    results['cost'] = cost
-
-    return results
 
 
-def get_cost(response) -> float:
-    model = response['model']
-    response_tokens = response['usage']['completion_tokens']
-    prompt_tokens = response['usage']['prompt_tokens']
-    total_tokens = response_tokens + prompt_tokens
+def get_cost(response=None, model=None, num_of_tokens=None) -> float:
+    if response:
+        model = response['model']
+        response_tokens = response['usage']['completion_tokens']
+        prompt_tokens = response['usage']['prompt_tokens']
+        total_tokens = response_tokens + prompt_tokens
+    elif model and num_of_tokens:
+        total_tokens = num_of_tokens
+    else:
+        raise ValueError("Error: Invalid parameters. Please try again.")
 
     # Get the model cost per token
     with open('models.json') as f:
@@ -478,6 +402,18 @@ def get_cost(response) -> float:
         exit()
 
 
+def check_balance(user: User) -> bool:
+    # Call get_cost() with keyword arguments
+    max_cost = get_cost(model=settings['model'], num_of_tokens=settings['max_tokens']) # Maximum possible cost of next response
+    #TODO: Could adjust max_tokens for next request based on user balance
+
+    if user.balance < max_cost:
+        print("Error: Insufficient funds. Please add more funds to your account.")
+        return False
+    
+    return True
+
+
 def select_model():
     model_list = get_model_list(display=True) # Get the model list with the display name
     print_model_list(model_list)
@@ -498,6 +434,236 @@ def select_model():
 
     # Store the selected model in the settings dictionary
     settings.update({'model': selected_model})
+
+
+def converse(user: User, conversation: list, session: dict):
+    # --------------Start conversation--------------
+    print("Beginning conversation...")
+    print("-" * 50)
+    print("Instructions:")
+    print("Enter a prompt to send to the chatbot (use '\\n' for a newline). Type '-end' to end the conversation.")
+    print("At any time, you may enter a command. To view a full list of commands, type '-help'.")
+
+    # --------------Start handling user input--------------
+
+    # Run the loop until the user ends the conversation
+    while True:
+        # Check if the user has enough funds to continue the conversation
+        if not check_balance(user):
+            # End the conversation
+            break
+
+        # Get user input
+        user_input = input(f'{user.username} > ').replace('\\n', '\n')
+        result = interpret_request(user, conversation, user_input)
+
+        # Handle the result
+        if result == True:
+            # User entered a command
+            continue
+        elif result == False:
+            # User ended the conversation
+            break
+        elif isinstance(result, str):
+            # User entered a prompt
+            prompt = result
+
+            try:
+                response = chat(prompt, conversation)
+            except ChatError:
+                # Ask the user if they would like to try again
+                while True:
+                    try_again = input("Would you like to try again? (y/n): ")
+                    if try_again == 'y':
+                        # Continue the conversation loop
+                        continue
+                    elif try_again == 'n':
+                        # Ends the conversation
+                        break
+                    else:
+                        print("Error: Invalid input. Please try again.")
+            except Exception as e:
+                print(e)
+                break
+
+            # Received response from API, now process it
+            #TODO: Check response status code
+            answer = response['choices'][0]['message']['content']
+            print(f"{settings['model']} > {answer}")
+
+            # Add the response to the conversation
+            conversation.append({"role": "assistant", "content": answer})  
+
+            # Deduct the cost of the response from the user's balance
+            cost = get_cost(response=response)
+            User.expense(user, cost)
+
+            # Update the session details
+            session['num_of_requests'] += 1
+            session['expense'] += cost
+
+        elif result is None:
+            # User entered "-end"
+            break
+
+        else:
+            print("Unknown response error. Please try again.")
+            continue
+    
+    session['end_time'] = datetime.now().isoformat()
+
+    return session
+
+
+def chat(prompt: str, conversation: list):
+    # Format the prompt
+    message = {"role": "user", "content": prompt}
+
+    # Redefining messages as conversation
+    # This is how you get continuous conversation. Conversation is a list of messages
+    #! Important: Stored as "conversation" locally, sent to API as "messages"
+    conversation.append(message)
+
+    # Settings + Prompt/Messages = Request
+    settings.update({'messages': conversation})
+    request = settings
+
+    #TODO: Create file for custom error classes
+    class ChatError(Exception):
+        def __init__(self, message):
+            super().__init__(message)
+            self.message = message
+
+    # Send request to API
+    try:
+        response = openai.ChatCompletion.create(**request)
+    except Exception:
+        conversation.remove(message)
+        raise ChatError("Error: Could not connect to the API. Please try again.")
+
+    return response
+
+
+def interpret_request(user: User, conversation: list, request: str):
+    '''
+    Interprets the user's request and handles commands.
+
+    Returns:
+        prompt (str): The prompt to send to the chatbot.
+        True: The user entered a command. Continue the loop.
+        False: The user ended the conversation. Break the loop.
+    '''
+    # Check if the user entered a command
+    commands = {
+        '-help': 'Display a list of commands',
+        '-balance': 'Display the user\'s balance',
+        '-model': 'Change the model',
+        '-end': 'End the conversation',
+        '-info': 'Show the session/conversation info'
+    }
+    
+    if request.startswith('-'):
+        # User entered a command
+        if request == '-help':
+            # Display a list of commands
+            for command, description in commands.items():
+                print(f"{command}: {description}")
+        elif request == '-balance':
+            # Display the user's balance
+            print(f"Balance: {user.balance}")
+        elif request == '-model':
+            # Change the model
+            select_model()
+        elif request == '-end':
+            # End the conversation
+            print("Ending conversation...")
+            print("-" * 50)
+            # TODO: end_conversation() Needs to end conversation but continue running the program.
+            return None
+        elif request == '-info':
+            # Show session info
+            #TODO: show_session_info()
+            pass
+        else:
+            # Invalid command
+            print("Error: Invalid command. Please try again.")
+    else:
+        # User entered a prompt
+        # Send the prompt to the API
+        prompt = request
+        return prompt
+
+    return True
+
+
+def analyze_response(response):
+    model = response['model']
+    response_type = response['object']
+    response_tokens = response['usage']['completion_tokens']
+    prompt_tokens = response['usage']['prompt_tokens']
+    total_tokens = response_tokens + prompt_tokens
+
+    cost = get_cost(response)
+
+    results = {}
+
+    results['model'] = model
+    results['response_type'] = response_type
+    results['response_tokens'] = response_tokens
+    results['prompt_tokens'] = prompt_tokens
+    results['total_tokens'] = total_tokens
+    results['cost'] = cost
+
+    return results
+
+def save_conversation(user: User, conversation: list, session: dict):
+    '''
+    Saves the conversation to the database.
+    '''
+    #TODO: Prevent saving the same conversation twice
+
+    # Convert conversation list to dict
+    conversation_dict = {
+        'messages': [{'user': msg['role'], 'content': msg['content']} for msg in conversation],
+        'session': session
+        }
+
+    # Save conversation to database
+    user.conversations.append(conversation_dict)
+    user.save()
+
+
+def export_conversation(user: User, conversation: list, filename: str):
+    '''
+    Exports the conversation to a text file.
+    '''
+    # Get the user's first name
+    first_name = user.first_name
+
+    # Get the current date and time
+    now = datetime.now()
+    date = now.strftime("%m-%d-%Y")
+    time = now.strftime("%H-%M-%S")
+
+    # Create the filename
+    if not filename:
+        filename = f"{first_name}_{date}_{time}.txt"
+    else:
+        if not filename.endswith('.txt'):
+            filename = f"{filename}.txt"
+
+    # Create the filepath. Current directory/exports/filename
+    cd = os.path.abspath(os.curdir)
+    filepath = os.path.join(cd, 'exports', filename)
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+
+    # Create the file
+    with open(filepath, 'w') as f:
+        # Write the conversation to the file
+        for message in conversation:
+            f.write(f"{message['role']}: {message['content']}\n")
+
+    print(f"Conversation exported to {filepath}")
 
 
 def main():
@@ -538,107 +704,97 @@ def main():
             message = {"role": "system", "content": system_message}
             conversation.append(message)
 
+    # Begin the conversation
+    conversation_loop = True
 
-    # Initialize session details
-    session_details = {
-        'id': str(uuid.uuid4()),
-        'user': user,
-        'start_time': datetime.now(),
-        'end_time': None,
-        'num_of_requests': 0,
-        'expense': 0.00,
-        'conversation': conversation
-    }
+    while conversation_loop:
+        # Initialize session details
+        session_details = {
+            'id': str(uuid.uuid4()),
+            'user': user.username,
+            'start_time': datetime.now().isoformat(),
+            'end_time': None,
+            'num_of_requests': 0,
+            'expense': 0.00,
+        }
 
-    app_loop = True
+        # Begin the conversation
+        info = converse(user, conversation, session_details) # Loops until user ends conversation. Info holds the session details
 
-    while app_loop:
-        # Get the prompt from the user
-        try:
-            response = handle_chat(user, conversation)
-        except Exception as e:
-            print(f'Error: {str(e)}')
-            
-        # Add to session cost
-        cost = get_cost(response)
-        
-        # Update the user's balance
-        user.expense(cost) #TODO: Actually already updates DB so don't need to do it again
-
-        # Update the session details
-        session_details['num_of_requests'] += 1
-        session_details['expense'] += cost
-
-        # Check if the user has enough funds to continue
-        if user.balance <= 0:
-            user.balance = 0 # If they overspent, set their balance to 0. Need to add a check to make sure they don't go negative.
-            print("You have run out of funds. Please contact an administrator to add more funds to your account.")
-            print("Exiting the application...")
-            exit()
-
-        #TODO: Refactor to look for options during the conversation instead of after each response
-        # Post-response actions loop
+        # End the conversation
+        # Post conversation actions loop
         while True:
+            action = input("To start a new conversation, type 'chat', or select another option. Type 'options' to see a list of options: ").lower()
 
-            # Ask the user if they want if they want more information
-            action = input("Press enter to ask another question, or select another option. Type 'options' to see a list of options: ").lower()
+            commands = {
+                'chat': 'Start a new conversation',
+                'options': 'Show a list of options',
+                'exit': 'Exit the program',
+                'change': 'Change the model. Use chat after changing the model to start a new conversation.',
+                'balance': 'Check your balance',
+                'info': 'View the conversation info',
+                'save': 'Save the conversation',
+                'export': 'Export the conversation to a text file',
+            }
 
-            while action not in ['info', 'exit', 'options', 'change','balance','']:
+            #TODO: Differentiate between session and conversation info. Users should be able to continue the conversation after viewing the session info
+            #TODO: Add load conversation option
+
+            while action not in ['chat', 'exit', 'options', 'change', 'balance', 'info', 'save', 'export']:
                 print('Error: Invalid input. Please try again.')
-                action = input("Press enter to ask another question, or select another option. Type 'options' to see a list of options: ").lower()
+                action = input("To start a new conversation, type 'chat', or select another option. Type 'options' to see a list of options: ").lower()
 
             if action == 'options':
-                print('info: Get more information about the response.')
-                print('change: Change the model.')
-                print('balance: Check your balance.')
-                print('exit: Exit the program.')
-                print('Press enter to continue.')
-                continue
-
-            if action == 'exit':
+                for command, description in commands.items():
+                    print(f"{command}: {description}")
+                    continue
+            elif action == 'chat':
+                # Start a new conversation
+                # Exit the post-response actions loop. Continue the conversation loop.
+                break
+            elif action == 'exit':
                 # Exit the post-response actions loop, and end the main loop
-                app_loop = False
+                conversation_loop = False
                 break
-            elif action == '':
-                # Exit the post-response actions loop, and return to the main loop
-                break
-            elif action == 'balance':
-                print(f'Your current balance is ${user.balance}.')
-                continue
-            elif action == 'info':
-                results = analyze_response(response)
-
-                print(f'Model: {results["model"]}')
-                print(f'Response Type: {results["response_type"]}')
-                print(f'Response Tokens: {results["response_tokens"]}')
-                print(f'Prompt Tokens: {results["prompt_tokens"]}')
-                print(f'Total Tokens: {results["total_tokens"]}')
-                print(f'Cost: ${results["cost"]:.5f}')
-
-                # Continue the post-response actions loop
-                continue
             elif action == 'change':
                 # Change the model
                 select_model()
-                print(f'{settings["model"]} will be used for the next request.')
+                print(f'{settings["model"]} will be used for the next conversation.')
+                continue
+            elif action == 'balance':
+                # Display the user's balance
+                print(f"Balance: {user.balance}")
+                continue
+            elif action == 'info':
+                # Show session info
+                for key, value in info.items():
+                    print(f"{key}: {value}")
+                continue
+            elif action == 'save':
+                # Save the conversation
+                save_conversation(user=user, conversation=conversation, session=info)
+                print('Conversation saved to user profile.')
+                continue
+            elif action == 'export':
+                # Export the conversation to a file
+                name = input("Enter a name for the file, or press enter to use the default name: ")
+                if name:
+                    filename = f"{name}.txt"
+                    export_conversation(user, conversation, filename)
+                else:
+                    export_conversation(user, conversation, None)
                 continue
             else:
-                # Continue the post-response actions loop
                 print('Error: Invalid input. Please try again.')
                 continue
-    
-    #TODO: Add a way to save the conversation to the database. Ask the user if they want to save it.
-    #TODO: Add a way to export the conversation to a text file
 
-    # Update the session details
-    session_details['end_time'] = datetime.now()
-
-    # Save the session details to the database
-    #TODO: Save the session details to the database. Need to create a session model and link it to the user model.
+    # End of conversation loop, meaning the user has ended the conversation. Can choose to start a new conversation or exit the program in the post-response actions loop.
 
     # Save updated user information to the database
     user.save()
 
+    # Application exit
+    client.close()
     print('Thank you for using the OpenAi API Chatbot Test')
 
 
