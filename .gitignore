@@ -7,3 +7,9 @@ venv/
 
 # Cache
 __pycache__/
+
+# Logs
+exports/
+
+# Installer files
+build/
