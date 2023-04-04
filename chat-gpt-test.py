@@ -1,5 +1,4 @@
 import openai
-import os
 import json
 import getpass
 import uuid
@@ -9,7 +8,7 @@ from datetime import datetime
 from users import User
 from pymongo import MongoClient
 
-# Using dotenc to load environment variables, development only
+# Using dotenv to load environment variables, development only
 # from dotenv import load_dotenv
 # load_dotenv()
 

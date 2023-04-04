@@ -1,26 +1,21 @@
 import bcrypt
-import json
 import uuid
-import os
 from pymongo import MongoClient
-from dotenv import load_dotenv
 
-load_dotenv()
+# Using dotenv to load environment variables, development only
+# from dotenv import load_dotenv
+# load_dotenv()
+
+# Using config.py to load environment variables, production
+from config import ATLAS_URI
 
 # Connect to the database
-atlas_url = os.getenv('ATLAS_URI')
+# atlas_url = os.getenv('ATLAS_URI') #! Development only, use config.py for production
+atlas_url = ATLAS_URI
 client = MongoClient(atlas_url)
 db = client['openai-app']
 users_collection = db['users']
-
-# class Database:
-#     def __init__(self):
-#         self.atlas_url = os.getenv('ATLAS_URI')
-#         self.client = MongoClient(self.atlas_url)
-#         self.db = self.client['openai-app']
-#         self.users_collection = self.db['users']
-        
-
+  
 class User:
     def __init__(self, first_name, last_name, email, username, password, role='user'):
         # self.db = Database()
