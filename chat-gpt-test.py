@@ -1,11 +1,12 @@
 import openai
 import json
-import getpass
+import stdiomask
 import uuid
 import json
 import os
 import time
 
+from exceptions import ChatError, ModelNotFound # Custom exceptions for rhe chat application
 from datetime import datetime
 from users import User
 from pymongo import MongoClient
@@ -76,7 +77,7 @@ def login():
 
     while incorrect_attempts < 3:
         username = input("\nEnter your username: ")
-        password = getpass.getpass("Enter your password: ")
+        password = stdiomask.getpass("Enter your password: ", mask='*')
 
         user = User.authenticate(username, password)
 
@@ -369,11 +370,7 @@ def get_cost(response=None, model=None, num_of_tokens=None) -> float:
     # Get the model cost per token
     with open('models.json') as f:
         models_json = json.load(f)
-    
-    class ModelNotFound(Exception):
-        def __init__(self, message):
-            super().__init__(message)
-            self.message = message
+
 
     try:
         if model not in [model['id'] for model in models_json["models"]]:
@@ -528,16 +525,12 @@ def chat(prompt: str, conversation: list):
     settings.update({'messages': conversation})
     request = settings
 
-    #TODO: Create file for custom error classes
-    class ChatError(Exception):
-        def __init__(self, message):
-            super().__init__(message)
-            self.message = message
-
     # Send request to API
     try:
         response = openai.ChatCompletion.create(**request)
     except Exception:
+        # Most commonly returns: openai.error.APIError
+        # Gives error when asking: "do you have a character or word limit?"
         conversation.remove(message)
         raise ChatError("Error: Could not connect to the API. Please try again.")
 
@@ -578,7 +571,6 @@ def interpret_request(user: User, conversation: list, request: str):
             # End the conversation
             print("Ending conversation...")
             print("-" * 50)
-            # TODO: end_conversation() Needs to end conversation but continue running the program.
             return None
         elif request == '-info':
             # Show session info

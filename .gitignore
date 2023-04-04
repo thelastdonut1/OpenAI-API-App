@@ -13,3 +13,6 @@ exports/
 
 # Installer files
 build/
+
+# Testing/Debuging
+.vscode/
