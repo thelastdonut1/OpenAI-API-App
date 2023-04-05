@@ -9,6 +9,14 @@ class ChatError(Exception):
         super().__init__(message)
         self.message = message
 
+class ModelError(Exception):
+    '''
+    Raised when the user selected a model with the incorrect endpoint.
+    '''
+    def __init__(self, message):
+        super().__init__(message)
+        self.message = message
+
 class ModelNotFound(Exception):
     '''
     Raised when a model can not be identified in the models.json file.

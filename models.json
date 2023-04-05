@@ -8,6 +8,7 @@
             "cpt": 0.000002,
             "object": "model",
             "owned_by": "openai",
+            "endpoint": "/v1/chat/completions",
             "parent": null,
             "permission": [
                 {
@@ -35,6 +36,7 @@
             "cpt": 0.0000004,
             "object": "model",
             "owned_by": "openai",
+            "endpoint": "/v1/completions",
             "parent": null,
             "permission": [
                 {
@@ -62,6 +64,7 @@
             "cpt": 0.0000005,
             "object": "model",
             "owned_by": "openai",
+            "endpoint": "/v1/completions",
             "parent": null,
             "permission": [
                 {
@@ -89,6 +92,7 @@
             "cpt": 0.000002,
             "object": "model",
             "owned_by": "openai",
+            "endpoint": "/v1/completions",
             "parent": null,
             "permission": [
                 {
@@ -116,6 +120,7 @@
             "cpt": 0.00002,
             "object": "model",
             "owned_by": "openai",
+            "endpoint": "/v1/completions",
             "parent": null,
             "permission": [
                 {
@@ -143,6 +148,7 @@
             "cpt": 0.00002,
             "object": "model",
             "owned_by": "openai",
+            "endpoint": "/v1/completions",
             "parent": null,
             "permission": [
                 {
@@ -170,6 +176,7 @@
             "cpt": 0.00002,
             "object": "model",
             "owned_by": "openai-internal",
+            "endpoint": "/v1/completions",
             "parent": null,
             "permission": [
                 {

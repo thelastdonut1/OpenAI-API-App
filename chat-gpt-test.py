@@ -138,8 +138,8 @@ def get_model_list(display: bool = False):
 
 def print_model_list(model_list):
     print("Available Models:")
-    for model in model_list:
-        print(f" - {model}")
+    for i, model in enumerate(model_list, start=1):
+        print(f"{i}. {model}")
 
 
 def list_admin_options():
@@ -336,25 +336,6 @@ def handle_admin(user: User):
         else:
             print("Error: Invalid command. Please try again.")
 
-#TODO: Add async functionality
-# async def call_openai_api(request):
-#     print("Sent request to API. Waiting for response...")
-
-#     # Start timer
-#     start_time = time.time()
-    
-#     # Make async request to API
-#     response = await openai.Completion.create(**request)
-
-#     # End timer
-#     end_time = time.time()
-#     total_time = end_time - start_time
-#     print(f"Received response in {total_time} seconds.\n")
-
-#     return response
-
- 
-
 
 def get_cost(response=None, model=None, num_of_tokens=None) -> float:
     if response:
@@ -412,20 +393,37 @@ def check_balance(user: User) -> bool:
 
 
 def select_model():
-    model_list = get_model_list(display=True) # Get the model list with the display name
-    print_model_list(model_list)
+    '''
+    Prompts the user to select a model from the model list.
+    Updated to accept model numbers or model names as input.
+    '''
+    model_display_list = get_model_list(display=True) # Get the model list with the display name
+    print_model_list(model_display_list)
     print()
 
-    selected_model = input("Enter a model name: ").lower()
+    model_id_list = get_model_list() # Get the model list with the id, what is stored in models.json
+    
+    # Create a dictionary to map model numbers to model names
+    model_dict = {}
+    for i, model in enumerate(model_id_list, start=1):
+         model_dict[i] = model
 
-    model_list = get_model_list() # Get the model list with the id
+    selected_model = input("Enter a model name/number. Press 'enter' to accept the default: ").lower()
+
+    try:
+        selected_model = int(selected_model)
+        # User entered a number
+        selected_model = model_dict[selected_model]
+    except ValueError:
+        # User entered a string
+        pass
 
     if not selected_model:
         # Set default model
         selected_model = 'gpt-3.5-turbo'
         print('Using default model: gpt-3.5-turbo\n')
 
-    while selected_model not in model_list:
+    while selected_model not in model_id_list:
         print('Error: Invalid model name. Please try again.')
         selected_model = input("Enter a model name: ").lower()
 
@@ -435,7 +433,7 @@ def select_model():
 
 def converse(user: User, conversation: list, session: dict):
     # --------------Start conversation--------------
-    print("Beginning conversation...")
+    print(f"Beginning conversation with {settings['model']}...")
     print("-" * 50)
     print("Instructions:")
     print("Enter a prompt to send to the chatbot (use '\\n' for a newline). Type '-end' to end the conversation.")
@@ -452,8 +450,8 @@ def converse(user: User, conversation: list, session: dict):
 
         # Get user input
         user_input = input(f'{user.username} > ').replace('\\n', '\n')
-        result = interpret_request(user, conversation, user_input)
-
+        result = interpret_request(user, session, user_input)
+        response = None
         # Handle the result
         if result == True:
             # User entered a command
@@ -465,22 +463,33 @@ def converse(user: User, conversation: list, session: dict):
             # User entered a prompt
             prompt = result
 
-            try:
-                response = chat(prompt, conversation)
-            except ChatError:
-                # Ask the user if they would like to try again
-                while True:
-                    try_again = input("Would you like to try again? (y/n): ")
-                    if try_again == 'y':
-                        # Continue the conversation loop
-                        continue
-                    elif try_again == 'n':
-                        # Ends the conversation
-                        break
-                    else:
-                        print("Error: Invalid input. Please try again.")
-            except Exception as e:
-                print(e)
+            while True:
+                try:
+                    response = chat(prompt, conversation)
+                except ChatError:
+                    # Ask the user if they would like to try again
+                    while True:
+                        try_again = input("Would you like to try to send the message again? (y/n): ")
+                        if try_again == 'y':
+                            # Continue the conversation loop
+                            break
+                        elif try_again == 'n':
+                            # Ends the conversation
+                            break
+                        else:
+                            print("Error: Invalid input. Please try again.")
+                            continue
+                    if try_again == 'n':
+                        break # End the inner while loop
+                except Exception as e:
+                    print(e)
+                    break
+                else:
+                    # No exceptions were raised during error handling
+                    break
+
+            if not response:
+                # Did not receive a response from the API
                 break
 
             # Received response from API, now process it
@@ -528,16 +537,17 @@ def chat(prompt: str, conversation: list):
     # Send request to API
     try:
         response = openai.ChatCompletion.create(**request)
-    except Exception:
+    except Exception as e:
         # Most commonly returns: openai.error.APIError
         # Gives error when asking: "do you have a character or word limit?"
+        print(e)
         conversation.remove(message)
         raise ChatError("Error: Could not connect to the API. Please try again.")
 
     return response
 
 
-def interpret_request(user: User, conversation: list, request: str):
+def interpret_request(user: User, session: dict, request: str):
     '''
     Interprets the user's request and handles commands.
 
@@ -574,6 +584,8 @@ def interpret_request(user: User, conversation: list, request: str):
             return None
         elif request == '-info':
             # Show session info
+            print("Not yet implemented.")
+            show_info(session)
             #TODO: show_session_info()
             pass
         else:
@@ -586,6 +598,41 @@ def interpret_request(user: User, conversation: list, request: str):
         return prompt
 
     return True
+
+def show_info(session: dict):
+    '''
+    Displays the session/conversation info.
+    '''
+    print("Would you like info on the last response received or the full session?")
+    print("1. Last response")
+    print("2. Full session")
+    print("3. Cancel")
+    user_input = input("Enter a number: ")
+
+    while user_input not in ['1', '2', '3']:
+        print("Error: Invalid input. Please try again.")
+        user_input = input("Enter a number: ")
+
+    if user_input == '1':
+        # Show last response info.
+        # I think because this is called in the loop, the response is in scope
+        if response is None:
+            print("Error: No response found. This feature is still in development.")
+            return
+        response_info = analyze_response(response)
+        print("Response info:")
+        for key, value in response_info.items():
+            print(f"{key}: {value}")
+
+    elif user_input == '2':
+        # Show full session info
+        # I think because this is called in the loop, the session is also in scope
+        for key, value in session.items():
+            print(f"{key}: {value}")
+
+    elif user_input == '3':
+        # Cancel
+        return
 
 
 def analyze_response(response):
