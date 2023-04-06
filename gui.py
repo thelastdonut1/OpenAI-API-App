@@ -6,19 +6,40 @@ import os
 import json
 import uuid
 
+# import sv_ttk #! This is a custom ttk theme. May use in the future.
+
+from PIL import Image, ImageTk
 from conversation import Conversation
 from datetime import datetime
 from config import API_KEY
+
+BACKGROUND = "#353740"
+NAVBAR = "#4f46e5"
+NAVBAR_HIGHLIGHT = "#818cf8"
+NAVBAR_TEXT = "#eeeeee"
+FIELD_BACKGROUND = "#353740"
+PROMPT_BACKGROUND = "#6e6e80"
+#FIELD_BACKGROUND = "#6e6e80"
+TEXT = "#eeeeee"
+LISTBOX = "#202123"
 
 class ChatApp(tk.Tk):
     def __init__(self):
         super().__init__()
 
-        self.title("OpenAI Chat")
-        self.geometry("500x650")
+        # sv_ttk.set_theme("dark")
 
-        # Set background color to light blue
-        self.configure(bg="#def")
+        self.title("OpenAI Chat")
+        self.geometry("800x700")
+        self.minsize(400, 500)
+
+        # Set background color
+        self.configure(bg="#222831")
+        
+        # Set the icon
+        png = Image.open("icons/gpt.png")
+        photo = ImageTk.PhotoImage(png)
+        self.iconphoto(False, photo)
 
         self.create_widgets()
     
@@ -31,77 +52,60 @@ class ChatApp(tk.Tk):
 
 
     def create_widgets(self):
-        nav_style = ttk.Style()
-        nav_style.configure("nav", background="#343434")
+        style = ttk.Style()
+        ttk.Style.theme_use(style, "clam")
+        # For some reason, you have to set the style to clam before you can configure it. I don't know why.
+        # If you do not, changing the background color will not work. It changes the color behind the
+        # button, not the button itself.
+        #! See docs on Styles: https://anzeljg.github.io/rin2/book2/2405/docs/tkinter/ttk-style-layer.html
 
-        nav_button_style = ttk.Style()
-        nav_button_style.configure("Navbar.TButton", background="#5c5c5c", foreground="#fff", relief=tk.FLAT)
-        nav_button_style.map("Navbar.TButton",
-                   background=[("active", "#7c7c7c")],
-                   relief=[("active", tk.FLAT)])
-
+        # Create the navbar frame
         self.navbar = ttk.Frame(self)
+        style.configure("Navbar.TFrame", background=NAVBAR)
+        self.navbar.configure(style="Navbar.TFrame")
         self.navbar.pack(fill=tk.X)
 
-        self.chat_button_nav = ttk.Button(self.navbar, text="Chat", command=self.show_chat, style="Navbar.TButton")
-        self.chat_button_nav.pack(side=tk.LEFT)
-
+        # Create the navbar buttons
+        # ---------------------------------------------
+        # Define the style for the navbar buttons
+        style.configure("Navbar.TButton", background=NAVBAR, foreground=TEXT, relief=tk.FLAT, font=("Arial", 10))
+        style.map("Navbar.TButton",
+                   background=[("active", NAVBAR_HIGHLIGHT)],
+                   relief=[("active", tk.FLAT)])
+        
+        # Add "Profile" window button to navbar
+        self.profile_button_nav = ttk.Button(self.navbar, text="Profile", style="Navbar.TButton")
+        self.profile_button_nav.pack(side=tk.RIGHT)
+        #TODO: Make profile page. Add command to profile button
+        
+        # Add "Settings" window button to navbar
         self.settings_button_nav = ttk.Button(self.navbar, text="Settings", command=self.show_settings, style="Navbar.TButton")
-        self.settings_button_nav.pack(side=tk.LEFT)
+        self.settings_button_nav.pack(side=tk.RIGHT)
 
-        self.header_label = ttk.Label(self, text="OpenAI Chat", font=("Arial", 24))
-        self.header_label.pack(pady=5)
+        # Add "Chat" window button to navbar
+        self.chat_button_nav = ttk.Button(self.navbar, text="Chat", command=self.show_chat, style="Navbar.TButton")
+        self.chat_button_nav.pack(side=tk.RIGHT)
 
+        # Add "Welcome" label to navbar
+        self.welcome_label = ttk.Label(self.navbar, text="Welcome, User", background=NAVBAR, foreground=TEXT,
+                                        font=("Arial", 10))
+        self.welcome_label.pack(side=tk.LEFT, padx=5)
+
+        # # Add application title at the top of the window
+        # self.header_label = ttk.Label(self, text="OpenAI Chat", font=("Arial", 12), background="#222831", foreground="#ececec")
+        # self.header_label.pack(pady=5)
+        
+        # Create the chat page
         self.chat_page = ChatPage(self)
         self.chat_page.pack(fill=tk.BOTH, expand=True)
 
+        # Create the settings page
         self.settings_page = SettingsPage(self)
         self.settings_page.pack(fill=tk.BOTH, expand=True)
         self.settings_page.pack_forget()
 
-        # Saved conversations listbox
-        # ---------------------------------------------
-        # Create the chat sessions frame
-        self.conversations_frame = ttk.Frame(self)
-        self.conversations_frame.pack(side=tk.LEFT, fill=tk.Y)
-
-        # Create the scrollbar for the chat sessions listbox
-        self.conversations_scrollbar = ttk.Scrollbar(self.conversations_frame)
-        self.conversations_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-        # Create the chat sessions listbox
-        self.conversations_listbox = tk.Listbox(self.conversations_frame, yscrollcommand=self.conversations_scrollbar.set)
-        self.conversations_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        self.conversations_scrollbar.config(command=self.conversations_listbox.yview)
-
-        # Populate the chat sessions listbox
-        # ---------------------------------------------
-        self.list_saved_conversations()
-        self.conversations_listbox.bind('<<ListboxSelect>>', self.load_conversation)
-        self.conversations_listbox.selection_set(0)
-
+        # Show the chat page on app start
         self.show_chat()
-
-    def list_saved_conversations(self):
-        # Get the path of the saved conversations folder
-        saved_conversations_path = os.path.join(os.getcwd(), "conversations")
-
-        # If the saved conversations folder does not exist, create it
-        if not os.path.exists(saved_conversations_path):
-            os.mkdir(saved_conversations_path)
-
-        # Get the list of files in the saved conversations folder
-        saved_conversations = os.listdir(saved_conversations_path)
-        
-        # List "New Conversation" for the empty window on app start
-        self.conversations_listbox.insert(tk.END, "New Conversation")
-
-        # Load the conversations from the files
-        for conversation in saved_conversations:
-            name = conversation.split(".")[0] # Removes the .json extension
-            name = name.replace("-", " ") # Replaces underscores with spaces
-            self.conversations_listbox.insert(tk.END, name)
 
     def show_chat(self):
         self.chat_page.pack(fill=tk.BOTH, expand=True)
@@ -114,13 +118,6 @@ class ChatApp(tk.Tk):
         self.chat_page.pack_forget()
         self.chat_button_nav.configure(state=tk.NORMAL)
         self.settings_button_nav.configure(state=tk.DISABLED)
-
-    def load_conversation(self, event: tk.Event):
-        selection = event.widget.curselection()
-        if selection:
-            index = selection[0]
-            convo = event.widget.get(index)
-            self.chat_page.load_conversation(convo)
 
 class ChatPage(ttk.Frame):
     def __init__(self, parent):
@@ -139,26 +136,97 @@ class ChatPage(ttk.Frame):
 
 
     def create_widgets(self):
-        self.chat_frame = ttk.Frame(self)
+        style = ttk.Style()
+        style.configure("TFrame", background=BACKGROUND) #! Literally the only way I could get this to fkn work
+
+        self.conversations_frame = ttk.Frame(self)
+        self.conversations_frame.pack(side=tk.LEFT, fill=tk.Y)
+        # Create the "Conversations" label
+        self.conversations_label = ttk.Label(self.conversations_frame, text="Conversations", font=("Arial", 12), background=LISTBOX,
+                                              foreground=TEXT)
+        self.conversations_label.pack(side=tk.TOP, pady=(5, 5))
+
+        style.configure("TScrollbar", background=BACKGROUND, foreground=NAVBAR)
+
+        # Create the scrollbar for the chat sessions listbox
+        self.conversations_scrollbar = ttk.Scrollbar(self.conversations_frame, orient=tk.VERTICAL, style="TScrollbar")
+        self.conversations_scrollbar.pack(side=tk.LEFT, fill=tk.Y)
+
+        self.conversations_listbox = tk.Listbox(self.conversations_frame, yscrollcommand=self.conversations_scrollbar.set,
+                                                background=LISTBOX, borderwidth=0, highlightthickness=0, relief=tk.FLAT)
+        self.conversations_listbox.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
+        # Configure the scrollbar to scroll the chat sessions listbox
+        self.conversations_scrollbar.config(command=self.conversations_listbox.yview)
+
+        style.configure("Convo.TButton", background=LISTBOX, foreground=TEXT, relief=tk.FLAT,
+                        borderwidth=0, anchor=tk.W)
+        style.map("Convo.TButton",
+                   background=[("active", NAVBAR_HIGHLIGHT)],
+                   relief=[("active", tk.FLAT)])
+
+        # Add the "New Conversation" button to the conversations listbox
+        self.new_convo_button = ttk.Button(self.conversations_listbox, text="New Conversation", style="Convo.TButton")
+        self.new_convo_button.pack(side=tk.TOP, pady=(5, 1), padx=2, fill=tk.X)
+
+
+        # Load the conversations listbox
+        self.list_saved_conversations()
+        self.conversations_listbox.bind('<<ListboxSelect>>', self.load_user_conversation)
+        self.conversations_listbox.selection_set(0)
+
+
+        # Frame that will house the chat dialog
+        self.chat_frame = tk.Frame(self)
         self.chat_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
+        # Create the chat dialog box
         self.chat_text = tk.Text(self.chat_frame, wrap=tk.WORD, state=tk.DISABLED)
+        self.chat_text.configure(background=FIELD_BACKGROUND, foreground=TEXT, font=("Arial", 10),
+                                 padx=10, pady=10, relief=tk.FLAT, borderwidth=0)
         self.chat_text.pack(fill=tk.BOTH, expand=True)
 
+        #TODO: Create the scrollbar for the chat dialog box
+        
+        # Create the frame that will be under the chat dialog box, and house the entry field and send button
         self.entry_frame = ttk.Frame(self)
         self.entry_frame.pack(fill=tk.X, padx=10, pady=10)
 
-        self.prompt_entry = ttk.Entry(self.entry_frame)
+        # Create a container to house the entry field and send button
+        # ---------------------------------------------
+        # Allows for the send button to appear to be in the text entry field
+        self.prompt_entry_container = tk.Frame(self.entry_frame)
+        self.prompt_entry_container.configure(background=PROMPT_BACKGROUND, relief=tk.RAISED, bd=1, padx=5, pady=5)
+        self.prompt_entry_container.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
+
+        # Create the text/prompt entry field
+        self.prompt_entry = tk.Text(self.prompt_entry_container, height=5, width=30, wrap=tk.WORD,
+                                    state=tk.NORMAL, font=("Arial", 10), background=PROMPT_BACKGROUND, bd=0,
+                                    foreground=TEXT, padx=5, pady=5)
         self.prompt_entry.pack(fill=tk.X, expand=True, side=tk.LEFT)
 
-        self.send_button = ttk.Button(self.entry_frame, text="Send", command=self.send_prompt)
-        self.send_button.pack(side=tk.RIGHT)
+        # Create the send button
+        style.configure("SendButton.TButton", background=PROMPT_BACKGROUND, foreground=TEXT, relief=tk.FLAT)
+        style.map("SendButton.TButton",
+                   background=[("active", "#343541")],
+                   relief=[("active", tk.SUNKEN)])
+
+        image = Image.open("icons/send.png")
+        image = image.resize(((12, 12)), Image.ANTIALIAS)
+        send_button_image = ImageTk.PhotoImage(image)
+        self.send_button = ttk.Button(self.prompt_entry_container, image=send_button_image, command=self.send_prompt
+                                      , style="SendButton.TButton")
+        self.send_button.image = send_button_image
+        self.send_button.pack(anchor=(tk.S), side=tk.RIGHT)
+
+
 
     def send_prompt(self):
-        prompt = self.prompt_entry.get()
+        # prompt = self.prompt_entry.get()
+        prompt = self.prompt_entry.get("1.0", tk.END)
         if prompt:
             self.append_message("user", prompt)
-            self.prompt_entry.delete(0, tk.END)
+            self.prompt_entry.delete("1.0", tk.END)
 
             threading.Thread(target=self.get_response, args=(prompt,)).start()
 
@@ -195,7 +263,8 @@ class ChatPage(ttk.Frame):
 
         # ---- Load the selected conversation ----
         convo_dir = os.path.join(os.getcwd(), "conversations")
-        filepath = os.path.join(convo_dir, name + ".json")
+        filename = name.replace(" ", "-") + ".json"
+        filepath = os.path.join(convo_dir, filename)
 
         if not os.path.exists(filepath):
             raise FileNotFoundError(f"Conversation {name} does not exist")
@@ -225,7 +294,10 @@ class ChatPage(ttk.Frame):
 
             # Remove the system message
             system_message = {"role": "system", "content": "You are a helpful assistant!"}
-            content = self.messages.remove(system_message)
+            try:
+                self.messages.remove(system_message)
+            except:
+                pass
 
             # If there are no messages, do not save
             if not self.messages:
@@ -239,7 +311,34 @@ class ChatPage(ttk.Frame):
             with open(file_path, "w") as f:
                 json.dump(self.conversation.__dict__, f, indent=4)
 
-    
+
+    def list_saved_conversations(self):
+        # Get the path of the saved conversations folder
+        saved_conversations_path = os.path.join(os.getcwd(), "conversations")
+
+        # If the saved conversations folder does not exist, create it
+        if not os.path.exists(saved_conversations_path):
+            os.mkdir(saved_conversations_path)
+
+        # Get the list of files in the saved conversations folder
+        saved_conversations = os.listdir(saved_conversations_path)
+        
+        for conversation in saved_conversations:
+            name = conversation.split(".")[0] # Removes the .json extension
+            name = name.replace("-", " ") # Replaces underscores with spaces
+            new_button = ttk.Button(self.conversations_listbox, text=name, command=lambda convo=name: self.load_conversation(convo),
+                                    style="Convo.TButton")
+            new_button.pack(side=tk.TOP, fill=tk.X, pady=1, padx=2)
+
+
+    def load_user_conversation(self, event: tk.Event):
+        selection = event.widget.curselection()
+        if selection:
+            index = selection[0]
+            convo = event.widget.get(index)
+            self.load_conversation(convo)
+
+
 class SettingsPage(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)

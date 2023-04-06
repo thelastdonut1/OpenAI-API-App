@@ -17,7 +17,8 @@ class Conversation:
     @messages.setter
     def messages(self, messages):
         for message in messages:
-            if message['role'] == ['system']:
+            print(message['role'])
+            if message['role'] == 'system':
                 messages.remove(message)
 
         self.__messages = messages
@@ -40,6 +41,8 @@ class Conversation:
             print("Error: ", e)
         
         answer = response['choices'][0]['message']['content']
+
+        self.messages.remove({"role": "user", "content": prompt})
 
         self.name = answer
 
