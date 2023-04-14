@@ -5,7 +5,7 @@ import openai
 import os
 import json
 import uuid
-
+import themes
 # import sv_ttk #! This is a custom ttk theme. May use in the future.
 
 from PIL import Image, ImageTk
@@ -13,15 +13,21 @@ from conversation import Conversation
 from datetime import datetime
 from config import API_KEY
 
-BACKGROUND = "#353740"
-NAVBAR = "#4f46e5"
-NAVBAR_HIGHLIGHT = "#818cf8"
-NAVBAR_TEXT = "#eeeeee"
-FIELD_BACKGROUND = "#353740"
-PROMPT_BACKGROUND = "#6e6e80"
-#FIELD_BACKGROUND = "#6e6e80"
-TEXT = "#eeeeee"
-LISTBOX = "#202123"
+
+# Set the application color theme
+#! Will need to implement a way to change the theme within the app
+theme = themes.light_theme
+
+BACKGROUND = theme["BACKGROUND"]
+NAVBAR = theme["NAVBAR"]
+NAVBAR_HIGHLIGHT = theme["NAVBAR_HIGHLIGHT"]
+NAVBAR_TEXT = theme["NAVBAR_TEXT"]
+FIELD_BACKGROUND = theme["FIELD_BACKGROUND"]
+PROMPT_BACKGROUND = theme["PROMPT_BACKGROUND"]
+#FIELD_BACKGROUND = theme["FIELD_BACKGROUND"]
+TEXT = theme["TEXT"]
+LISTBOX = theme["LISTBOX"]
+
 
 class ChatApp(tk.Tk):
     def __init__(self):
@@ -30,7 +36,7 @@ class ChatApp(tk.Tk):
         # sv_ttk.set_theme("dark")
 
         self.title("OpenAI Chat")
-        self.geometry("800x700")
+        self.geometry("1000x700")
         self.minsize(400, 500)
 
         # Set background color
